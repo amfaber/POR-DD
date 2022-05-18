@@ -1,0 +1,6 @@
+[submodule "EquiBind"]
+	path = EquiBind
+	url = https://github.com/amfaber/EquiBind
+[submodule "gnina"]
+	path = gnina
+	url = https://github.com/amfaber/gnina
