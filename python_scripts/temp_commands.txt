@@ -1,0 +1,1 @@
+equibind_inference.py -o data/equibind_processed/testing -r data/raw_data/cyp_screen/protein.pdb -l data/raw_data/cyp_screen/test_3D_opt_1216.sdf
