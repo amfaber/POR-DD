@@ -1,5 +1,6 @@
 
-
+data/
+python_scripts/gpu_pty
 **PDBBind*
 
 
@@ -132,3 +133,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
