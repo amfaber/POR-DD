@@ -4,3 +4,6 @@
 [submodule "gnina"]
 	path = gnina
 	url = https://github.com/amfaber/gnina
+[submodule "gflownet"]
+	path = gflownet
+	url = https://github.com/amfaber/gflownet
