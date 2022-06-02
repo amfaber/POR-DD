@@ -98,7 +98,7 @@ def load_bulk2(fp):
         mol = re.split(" |\n", mol, 2)
         idx, name = mol[:2]
         idx = int(idx)
-        out[idx] = {}
+        out[idx] = {"name": name}
         for match in re.findall("[a-zA-Z]+: -?[0-9]+\.?[0-9]*", mol[2]):
             key, val = match.split(": ")
             val = float(val)
