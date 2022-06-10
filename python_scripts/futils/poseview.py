@@ -44,7 +44,7 @@ def create_widget(biopython_protein, ligs, cnndata = None, title = None):
         trace.marker.color = "#ff7f0e"
         fig.add_trace(trace, secondary_y=True)
         fig.update_yaxes(range = [0, 1], secondary_y=False)
-        fig.update_yaxes(range = [2, 7], secondary_y=True)
+        fig.update_yaxes(range = [2, 8], secondary_y=True)
         fig.update_layout(showlegend = False)
         i.observe(partial(update_fig, fig = fig), names = "value")
     i.observe(update_lig, names = "value")
