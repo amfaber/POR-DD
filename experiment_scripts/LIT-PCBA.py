@@ -6,8 +6,10 @@ import multiligand_inference
 import rdkit.Chem as Chem
 sys.path.append("../EquiBind/datasets")
 from multiple_ligands import Ligands
+import argparse
 
-def experiment(inputdir, equibind_output, gnina_output):
+#%%
+def experiment(inputdir, equibind_output, gnina_output, targets_to_run = None):
     walker = os.walk(inputdir)
     next(walker)
     
@@ -19,10 +21,11 @@ def experiment(inputdir, equibind_output, gnina_output):
     model = multiligand_inference.load_model(args)
 
     for curdir, folders, files in walker:
+        if targets_to_run is not None and curdir.rsplit("/", 1)[1] not in targets_to_run:
+            continue
         prots = [join(curdir, file) for file in files if file.endswith(".pdb")]
         ligs = [join(curdir, file) for file in files if file.endswith(".smi")]
         for lig in ligs:
-
             dataset = Ligands(lig, None, args)
             n_dataloaders = 12 if len(dataset) > 1000 else 0
             args.n_workers_data_load = n_dataloaders
@@ -64,7 +67,13 @@ def experiment(inputdir, equibind_output, gnina_output):
 
 #%%
 if __name__ == "__main__":
-    x = experiment("../data/raw_data/LIT-PCBA/AVE_unbiased", "../data/equibind_processed", "../data/gnina_processed")
-    print(x)
+    parser = argparse.ArgumentParser(description="Run LIT-PCBA experiment.")
+    parser.add_argument("-i", "--inputdir", default = "../data/raw_data/LIT-PCBA/AVE_unbiased", help="Directory containing input files.")
+    parser.add_argument("-eo", "--equibind_output", default = "../data/equibind_processed", help="Directory to write equibind output to.")
+    parser.add_argument("-go", "--gnina_output", default = "../data/gnina_processed", help="Directory to write gnina output to.")
+    parser.add_argument("--targets", default = None, nargs="*", help="Targets to run.")
+    args = parser.parse_args()
+    # print(args)
+    experiment(args.inputdir, args.equibind_output, args.gnina_output, args.targets)
 
 # %%
