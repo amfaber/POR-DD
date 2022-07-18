@@ -67,10 +67,11 @@ def experiment(inputdir, equibind_output, gnina_output, targets_to_run = None):
 
 #%%
 if __name__ == "__main__":
+    from futils import ROOT
     parser = argparse.ArgumentParser(description="Run LIT-PCBA experiment.")
-    parser.add_argument("-i", "--inputdir", default = "../data/raw_data/LIT-PCBA/AVE_unbiased", help="Directory containing input files.")
-    parser.add_argument("-eo", "--equibind_output", default = "../data/equibind_processed", help="Directory to write equibind output to.")
-    parser.add_argument("-go", "--gnina_output", default = "../data/gnina_processed", help="Directory to write gnina output to.")
+    parser.add_argument("-i", "--inputdir", default = ROOT / "data/raw_data/LIT-PCBA/AVE_unbiased", help="Directory containing input files.")
+    parser.add_argument("-eo", "--equibind_output", default = ROOT / "data/equibind_processed", help="Directory to write equibind output to.")
+    parser.add_argument("-go", "--gnina_output", default = ROOT / "data/gnina_processed", help="Directory to write gnina output to.")
     parser.add_argument("--targets", default = None, nargs="*", help="Targets to run.")
     args = parser.parse_args()
     # print(args)

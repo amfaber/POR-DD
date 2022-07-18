@@ -8,23 +8,24 @@ import tempfile
 import numpy as np
 import pandas as pd
 import sys
+from futils import ROOT
 
 
 # %%
-ligfn = "../data/raw_data/cyp_screen/test_3D_opt_1216.sdf"
+ligfn = ROOT / "data/raw_data/cyp_screen/test_3D_opt_1216.sdf"
 supp = Chem.SDMolSupplier(ligfn)
 first_n = 10
-protfn = "../data/raw_data/por_structures/3ES9_bioassem_1.pdb"
+protfn = ROOT / "data/raw_data/por_structures/3ES9_bioassem_1.pdb"
 
-top_dir = "../data/raw_data/multiligand_QA"
+top_dir = ROOT / "data/raw_data/multiligand_QA"
 
 multi_in_dir = join(top_dir, f"multi_input")
 multi_in = join(multi_in_dir, f"first_{first_n}.sdf")
 multi_outs = [join(top_dir, "multi_output_0"), join(top_dir, "multi_output_1")]
-multi_path = "../EquiBind/multiligand_inference.py"
+multi_path = ROOT / "EquiBind/multiligand_inference.py"
 
-single_location = "../EquiBind/" #THIS WILL BE cd'ed INTO BEFORE RUNNING THE "SINGLE" SCRIPT AND OUT OF AFTERWARDS.
-path_to_top_dir_from_single_location = "../data/raw_data/multiligand_QA"
+single_location = ROOT / "EquiBind/" #THIS WILL BE cd'ed INTO BEFORE RUNNING THE "SINGLE" SCRIPT AND OUT OF AFTERWARDS.
+path_to_top_dir_from_single_location = ROOT / "data/raw_data/multiligand_QA"
 single_outs = [join(path_to_top_dir_from_single_location, "single_output_0"), join(path_to_top_dir_from_single_location, "single_output_1")]
 single_in = join(path_to_top_dir_from_single_location, "single_input")
 single_path = "inference.py"

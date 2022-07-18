@@ -23,7 +23,8 @@ def convert(LIT_PCBA_path):
 #%%
 
 if __name__ == "__main__":
-    convert("../data/raw_data/LIT-PCBA/AVE_unbiased")
+    from futils import ROOT
+    convert(ROOT / "data/raw_data/LIT-PCBA/AVE_unbiased")
     # convert("../data/raw_data/LIT-PCBA/full_data")
 
 

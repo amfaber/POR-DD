@@ -1,8 +1,9 @@
 import pandas as pd
 import os
 import re
+from futils import ROOT
 
-def load_index(filename = "INDEX_general_PL_data.2020", path = "/home/amfaber/comparison/PDBBind_index"):
+def load_index(filename = "INDEX_general_PL_data.2020", path = ROOT / "comparison/PDBBind_index"):
     os.chdir(path)
     with open(filename) as file:
         data = {"name": [], "resolution": [], "release_year": [], "aff": [],
