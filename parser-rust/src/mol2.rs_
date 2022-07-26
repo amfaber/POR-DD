@@ -1,0 +1,37 @@
+use std::{path, fs, io};
+use std::io::prelude::*;
+use flate2::read::GzDecoder;
+use std::ops::Index;
+
+pub struct Mols<'a> {
+    contents: String,
+    mols: Vec<&'a str>,
+}
+
+impl<'a> Mols<'a> {
+
+    pub fn new(input_dir: &path::Path, sdf_name: &str) -> Result<Mols<'a>, io::Error>{
+
+        let sdf_file_path = input_dir.join(sdf_name.replace("_rescore", ".sdf.gz"));
+        let sdf_file = fs::File::open(sdf_file_path)?;
+        let mut sdf_decoder = GzDecoder::new(sdf_file);
+        let mut sdf_contents = String::new();
+    
+        sdf_decoder.read_to_string(&mut sdf_contents)?;
+        let mols = sdf_contents.split("$$$$").collect();
+
+        Ok(Mols {
+            contents: sdf_contents,
+            mols: mols,
+            // mols: Vec::new(),
+        })
+    }
+}
+
+impl<'a> Index<usize> for Mols<'a> {
+    type Output = str;
+
+    fn index(&self, index: usize) -> &str {
+        &self.mols[index]
+    }
+}
