@@ -7,7 +7,7 @@ use std::io::prelude::*;
 use regex::Regex;
 use std::collections::{HashMap};
 
-// use std::time;
+use std::time;
 // use std::thread;
 use threadpool::ThreadPool;
 use lazy_static::lazy_static;
@@ -27,7 +27,7 @@ struct MolEntry{
     vsscore: f32,
     activity: String,
     protein: String,
-    index_from_file: Option<usize>,
+    index_from_file: Option<i32>,
 }
 
 // Header: {0: "Rank", 1: "Title", 2: "Vina", 3: "Target", 4: "File", 5: "newdefault_CNNaffinity", 6: "newdefault_CNNscore"}
@@ -46,7 +46,7 @@ impl MolEntry{
             vsscore: f32::NEG_INFINITY,
             activity: String::new(),
             protein: String::new(),
-            index_from_file: None,
+            index_from_file: Some(-1),
         }
     }
 
@@ -72,7 +72,7 @@ impl MolEntry{
         let protein = properties.name("protein").unwrap().as_str().to_string();
 
         let index_from_file = match properties.name("idx"){
-            Some(res) => Some(res.as_str().parse::<usize>().unwrap()),
+            Some(res) => Some(res.as_str().parse::<i32>().unwrap()),
             None => None,
         };
 
@@ -180,14 +180,14 @@ fn open_output_file(
     Ok(output_file)
 }
 
-fn handle_end_of_chunk(
+fn start_decompressor_threads(
     best_mols: & Vec<MolEntry>,
     target: &str, 
     input_dir: &path::PathBuf, 
     header: &Vec<String>, 
     pool: &Arc<Mutex<ThreadPool>>,
-    output_file: &mut Option<fs::File>,
-    ) -> Result<(), io::Error>{
+    // output_file: &mut fs::File,
+    ) -> mpsc::Receiver<(String, std::vec::IntoIter<String>)>{
     let mut from_each_file = HashMap::<String, Vec<MolEntry>>::new();
 
     for mol in best_mols.iter(){
@@ -202,10 +202,9 @@ fn handle_end_of_chunk(
         let input_dir = input_dir.clone();
         let header = header.clone();
         let tx = tx.clone();
-        // println!("About to load {} in target {}", file, target_name);
         let pool = pool.lock().unwrap();
         (*pool).execute(move || {
-            println!("Loading {} in target {}", file, target_name);
+            // println!("Loading {} in target {}", file, target_name);
             let mut sdf_contents = String::new();
             let mut mols = Vec::new();
             load_mols(&input_dir, &file, &mut sdf_contents, &mut mols).unwrap();
@@ -223,16 +222,41 @@ fn handle_end_of_chunk(
                 &molentry.protein,
                 "\n\n$$$$\n");
             }
+            // println!("Done {} in target {}", file, target_name);
             tx.send((file, this_files_structures.into_iter())).unwrap();
         });
-        drop(pool);
+        // drop(pool);
     }
     drop(tx);
+    rx
+}
+
+fn gather_work_and_write(rx: mpsc::Receiver<(String, std::vec::IntoIter<String>)>, best_mols: &Vec<MolEntry>, output_file: &mut fs::File, target: &str) -> Result<(), io::Error>{
+    // println!("Writing block {} in target {}", best_mols[0].index_from_file.unwrap_or(-1), target);
     let mut best_structures = HashMap::<String, _>::new();
+    // let mut waiting = false;
+    // match rx.try_recv(){
+    //     Ok((file, structures)) => {
+    //         best_structures.insert(file, structures);
+    //     }
+    //     Err(mpsc::TryRecvError::Empty) => {
+    //         println!("{} started waiting for work", target);
+    //         waiting = true;
+    //     }
+    //     Err(mpsc::TryRecvError::Disconnected) => {
+    //         panic!("{} disconnected", target);
+    //     }
+    // };
+    let now = time::Instant::now();
     for received in rx{
+        // if waiting{
+        //     println!("{} stopped waiting for work", target);
+        //     waiting = false;
+        // }
         let (file, structures) = received;
         best_structures.insert(file, structures);
     }
+    println!("{} waited for {}s", target, (now.elapsed().as_millis() as f32)/1000.);
 
     let mut chunk_to_write = String::new();
 
@@ -241,33 +265,34 @@ fn handle_end_of_chunk(
         chunk_to_write.push_str(&(best_structures.get_mut(&mol.file).unwrap().next().unwrap()));
     }
 
-    match output_file {
-        Some(ref mut f) => {
-            f.write_all(chunk_to_write.as_bytes())?;
-        },
-        None => {
-            panic!("No output file opened");
-        }
-    }
+    output_file.write_all(chunk_to_write.as_bytes())?;
     Ok(())
 }
 
 fn read_block(rest_of_lines: &mut io::Lines<io::BufReader<GzDecoder<fs::File>>>,
     leftover: Option<MolEntry>,
-
+    target: &str,
     ) -> Result<(
-        HashMap<String, usize>,
+        // HashMap<String, usize>,
         Vec<MolEntry>,
         Option<MolEntry>,
         Option<String>,
     ), io::Error> {
+    let block = match leftover.as_ref(){
+        Some(mol) => mol.index_from_file.unwrap_or(-1),
+        None => 0,
+    };
+    // println!("Reading block {} in {}", block, target);
+    
+    // println!("Reading block {}", );
     let mut name_to_ind = HashMap::<String, usize>::new();
     let mut best_mols  = Vec::<MolEntry>::new();
-
+    let mut to_read_first_line = leftover.is_none();
+    
     let mut prev_mol = match leftover{
         Some(mol) => {
+            name_to_ind.insert(mol.name.clone(), 0);
             best_mols.push(mol.clone());
-            name_to_ind.insert(mol.file.clone(), 0);
             mol
         },
         None => MolEntry::default(),
@@ -275,19 +300,25 @@ fn read_block(rest_of_lines: &mut io::Lines<io::BufReader<GzDecoder<fs::File>>>,
     let mut leftover = None;
     let mut need_new_file = None;
     for line in rest_of_lines{
+        
         let line: Vec<&str> = line.as_ref().unwrap().split_whitespace().collect();
-
+        
         let new_mol = MolEntry::new(line);
-
+        
         let at_the_end_of_chunk = new_mol.index_from_file != prev_mol.index_from_file;
         if new_mol.activity != prev_mol.activity {
-           need_new_file = Some(new_mol.activity.clone());
+            need_new_file = Some(new_mol.activity.clone());
         };
-
+        
         if at_the_end_of_chunk{
-            leftover = Some(new_mol);
-            // prev_mol = new_mol;
-            break;
+            if to_read_first_line{
+                to_read_first_line = false;
+            }
+            else{
+                leftover = Some(new_mol);
+                // prev_mol = new_mol;
+                break;
+            }
         }
         
         match name_to_ind.get(&new_mol.name){
@@ -300,7 +331,8 @@ fn read_block(rest_of_lines: &mut io::Lines<io::BufReader<GzDecoder<fs::File>>>,
         
         prev_mol = new_mol;
     }
-    Ok((name_to_ind, best_mols, leftover, need_new_file))
+    // println!("Finished block {} in {}", block, target);
+    Ok((best_mols, leftover, need_new_file))
 }
 
 fn parse_target(target: &str, input_dir: path::PathBuf, output_dir: path::PathBuf, pool: Arc<Mutex<ThreadPool>>) -> Result<(), io::Error> {
@@ -308,7 +340,7 @@ fn parse_target(target: &str, input_dir: path::PathBuf, output_dir: path::PathBu
     let input_dir = input_dir.join(target);
     let output_dir = output_dir.join(target);
     
-    // let mut already_opened_files = HashSet::new();
+
 
     let summary_file = fs::File::open(input_dir.join("newdefault.summary.gz"))?;
     let summary_decoder = GzDecoder::new(summary_file);
@@ -318,55 +350,40 @@ fn parse_target(target: &str, input_dir: path::PathBuf, output_dir: path::PathBu
     summary_bufreader.read_line(&mut header)?;
     let header = header.split_whitespace().map(|s| s.to_string()).collect::<Vec<String>>();
 
-    let mut prev_mol = MolEntry::default();
     let mut all_lines = summary_bufreader.lines();
 
     let leftover = None;
-    let (name_to_ind, best_mols, leftover, need_new_file) = read_block(&mut all_lines, leftover)?;
-    let mut prev_leftover = leftover;
-    let mut output_file = open_output_file(&output_dir, &need_new_file.unwrap())?;
+    let (best_mols, leftover, need_new_file) = read_block(&mut all_lines, leftover, &target)?;
 
+
+    let mut prev_leftover = leftover;
+    let mut prev_best_mols = best_mols;
+    let mut output_file = open_output_file(&output_dir, &need_new_file.as_ref().unwrap())?;
+    let mut prev_need_new_file: Option<String> = None;
     loop{
-        let (name_to_ind, best_mols, leftover, need_new_file) = read_block(&mut all_lines, prev_leftover)?;
-        if leftover.is_none(){
+        let rx = start_decompressor_threads(&prev_best_mols, target, &input_dir, &header, &pool);
+        let (best_mols, leftover, need_new_file) = read_block(&mut all_lines, prev_leftover, &target)?;
+        
+
+        gather_work_and_write(rx, &prev_best_mols, &mut output_file, &target)?;
+        if prev_need_new_file.is_some(){
+            let activity = prev_need_new_file.as_ref().unwrap();
+            output_file = open_output_file(&output_dir, &activity)?;
+        }
+        prev_leftover = leftover;
+        prev_best_mols = best_mols;
+        prev_need_new_file = need_new_file;
+        if prev_leftover.is_none(){
             break;
         }
-        else {
-            prev_leftover = leftover;
-        }
     }
-    // for line in all_lines{
-    //     let line: Vec<&str> = line.as_ref().unwrap().split_whitespace().collect();
+    if prev_need_new_file.is_some(){
+        let activity = prev_need_new_file.as_ref().unwrap();
+        output_file = open_output_file(&output_dir, &activity)?;
+    }
+    let rx = start_decompressor_threads(&prev_best_mols, target, &input_dir, &header, &pool);
+    gather_work_and_write(rx, &prev_best_mols, &mut output_file, &target)?;
 
-    //     let new_mol = MolEntry::new(line);
-        
-    //     if output_file.is_none() {
-    //         output_file = open_output_file(&output_dir, &new_mol.activity)?;
-    //     }
-
-    //     let at_the_end_of_chunk = new_mol.index_from_file != prev_mol.index_from_file;
-
-    //     if at_the_end_of_chunk {
-    //         handle_end_of_chunk(&mut best_mols, &mut name_to_ind, target, &input_dir, &header, &pool, &mut output_file)?;
-    //     }
-
-    //     if new_mol.activity != prev_mol.activity {
-    //         output_file = open_output_file(&output_dir, &new_mol.activity)?;
-    //     }
-
-        
-    //     match name_to_ind.get(&new_mol.name){
-    //         Some(index) => {(&mut best_mols[*index]).update_to_best(&new_mol, "vsscore");}
-    //         None => {
-    //             name_to_ind.insert(new_mol.name.clone(), best_mols.len());
-    //             best_mols.push(new_mol.clone());
-    //         }
-    //     };
-        
-    //     prev_mol = new_mol;
-        
-    // }
-    // handle_end_of_chunk(&mut best_mols, &mut name_to_ind, target, &input_dir, &header, &pool, &mut output_file)?;
     Ok(())
 }
 
@@ -374,19 +391,19 @@ fn parse_all_targets_in_dir(input_dir: path::PathBuf, output_dir: path::PathBuf,
     let pool_outer = ThreadPool::new(threads_outer);
     let pool_inner = Arc::new(Mutex::new(ThreadPool::new(threads_inner)));
     let targets = fs::read_dir(&input_dir)?;
-    // let (tx, rx) = mpsc::channel();
+
     for target in targets{
         let target = target?;
         if target.file_type()?.is_dir(){
             let target = target.file_name().to_str().unwrap().to_string();
             let input_dir = input_dir.clone();
             let output_dir = output_dir.clone();
-            // let tx = tx.clone();
+
             let pool_inner = pool_inner.clone();
             pool_outer.execute(move || {
                 parse_target(&target, input_dir, output_dir, pool_inner).unwrap();
             });
-            // parse_target("ADRB2", input_dir, output_dir).unwrap();
+
             // break;
 
         }
@@ -398,6 +415,6 @@ fn main() -> Result<(), io::Error> {
 
     let input_dir = path::PathBuf::from("/home/qzj517/POR-DD/data/gnina_LIT-PCBA_VS_data/lit-pcba");
     let output_dir = path::PathBuf::from("/home/qzj517/POR-DD/data/gnina_LIT-PCBA_VS_data/best_scoring_vsscore");
-    parse_all_targets_in_dir(input_dir, output_dir, 7, 2)?;
+    parse_all_targets_in_dir(input_dir, output_dir, 20, 15)?;
     Ok(())
 }
