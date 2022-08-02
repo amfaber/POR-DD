@@ -1,11 +1,14 @@
 // use std::sync::mpsc::Sender;
 // use std::alloc::Global;
+use glob::glob;
+use clap::Parser;
 use std::{path, fs, io, slice, str};
 use flate2::read::GzDecoder;
 use std::io::BufRead;
 use std::io::prelude::*;
 use regex::Regex;
 use std::collections::{HashMap};
+
 
 use std::time;
 // use std::thread;
@@ -53,11 +56,28 @@ impl MolEntry{
     fn new(line: Vec<&str>) -> MolEntry{
         let index = line[0].parse::<usize>().unwrap()-1;
         let name = line[1].to_string();
-        let vina = line[2].parse::<f32>().unwrap();
+        let mut vina = line[2].parse::<f32>().unwrap();
         let file = line[4].to_string();
-        let cnnaffinity = line[5].parse::<f32>().unwrap();
-        let cnnscore = line[6].parse::<f32>().unwrap();
-        let vsscore = cnnaffinity * cnnscore;
+        let cnnaffinity: f32;
+        let cnnscore: f32;
+        let vsscore: f32;
+        match line.get(5){
+                    Some(s) => {
+                        cnnaffinity = s.parse::<f32>().unwrap();
+                        cnnscore = line[6].parse::<f32>().unwrap();
+                        vsscore = cnnaffinity * cnnscore;
+                    },
+                    None => {
+                        cnnaffinity = f32::NEG_INFINITY;
+                        cnnscore = f32::NEG_INFINITY;
+                        vsscore = f32::NEG_INFINITY;
+                        vina = f32::NEG_INFINITY;
+                    },
+        };
+        
+
+        // let cnnscore = line[6].parse::<f32>().unwrap();
+        // let vsscore = cnnaffinity * cnnscore;
 
         let properties = match RE.captures(&file){
             Some(res) => res,
@@ -107,7 +127,7 @@ impl MolEntry{
         }
     }
 
-    fn update_to_best(&mut self, other: &Self, compare_type: &str) -> (){
+    fn update_to_best(&mut self, other: &Self, compare_type: &str, equibind_best: &Option<HashMap<String, String>>) -> (){
 
         let new_is_better = match compare_type.to_lowercase().as_str(){
             "vina" => {
@@ -126,20 +146,39 @@ impl MolEntry{
                 panic!("Unsupported comparison type: {}", compare_type);
             }
         };
-        if new_is_better{
+
+        let accept_change = match equibind_best.as_ref(){
+            Some(hashmap) => {
+                match hashmap.get(&self.name){
+                    Some(equibind_protein) => {
+                        equibind_protein == &other.protein && (equibind_protein != &self.protein || new_is_better)
+                    },
+                    None => {
+                        new_is_better
+                    }
+                }
+            }
+            None => {
+                new_is_better
+            }
+        };
+
+        if accept_change{
             *self = other.clone();
         }
     }
 }
 
-fn load_mols(input_dir: &path::Path, sdf_name: &str, sdf_contents: &mut String, mols: &mut Vec<&str>) -> Result<(), io::Error>{
-    mols.clear();
-    sdf_contents.clear();
+fn load_mols<'a>(input_dir: &path::Path, sdf_name: &str) -> Result<(String, Vec<&'a str>), io::Error>{
+    // mols.clear();
+    // sdf_contents.clear();
+    let mut mols = Vec::new();
+    let mut sdf_contents = String::new();
     let sdf_file_path = input_dir.join(sdf_name.replace("_rescore", ".sdf.gz"));
     let sdf_file = fs::File::open(sdf_file_path)?;
     let mut sdf_decoder = GzDecoder::new(sdf_file);
     // sdf_decoder.read_to_string(sdf_contents)?;
-    sdf_decoder.read_to_string(sdf_contents)?;
+    sdf_decoder.read_to_string(&mut sdf_contents)?;
 
     let iter = sdf_contents.split("$$$$\n");
 
@@ -155,8 +194,11 @@ fn load_mols(input_dir: &path::Path, sdf_name: &str, sdf_contents: &mut String, 
             mols.push(slc);
         }
     }
-    
-    Ok(())
+    // for mol in iter{
+    //     mols.push(mol);
+    // }
+
+    Ok((sdf_contents, mols))
 }
 
 macro_rules! str_append {
@@ -170,10 +212,11 @@ macro_rules! str_append {
 fn open_output_file(
     output_dir: &path::Path,
     activity: &str,
+    summary_name: &str,
     ) -> Result<fs::File, io::Error>{
     // let mut output_file = None;
     let writer_path = output_dir.
-                                join(format!("{}.sdf", activity));
+                                join(format!("{}_{}.sdf", summary_name, activity));
     fs::create_dir_all(writer_path.parent().unwrap()).unwrap();
     let output_file = fs::File::create(writer_path).unwrap();
 
@@ -198,16 +241,15 @@ fn start_decompressor_threads(
     let (tx, rx) = mpsc::channel();
 
     for (file, molentries) in from_each_file{
-        let target_name = target.to_string(); 
+        let _target_name = target.to_string(); 
         let input_dir = input_dir.clone();
         let header = header.clone();
         let tx = tx.clone();
         let pool = pool.lock().unwrap();
         (*pool).execute(move || {
             // println!("Loading {} in target {}", file, target_name);
-            let mut sdf_contents = String::new();
-            let mut mols = Vec::new();
-            load_mols(&input_dir, &file, &mut sdf_contents, &mut mols).unwrap();
+
+            let (_sdf_contents, mols) = load_mols(&input_dir, &file).unwrap();
             let mut this_files_structures = Vec::new();
             for molentry in molentries{
                 this_files_structures.push(mols[molentry.index].to_string());
@@ -271,17 +313,18 @@ fn gather_work_and_write(rx: mpsc::Receiver<(String, std::vec::IntoIter<String>)
 
 fn read_block(rest_of_lines: &mut io::Lines<io::BufReader<GzDecoder<fs::File>>>,
     leftover: Option<MolEntry>,
-    target: &str,
+    _target: &str,
+    equibind_best: &Option<HashMap<String, String>>,
     ) -> Result<(
         // HashMap<String, usize>,
         Vec<MolEntry>,
         Option<MolEntry>,
         Option<String>,
     ), io::Error> {
-    let block = match leftover.as_ref(){
-        Some(mol) => mol.index_from_file.unwrap_or(-1),
-        None => 0,
-    };
+    // let block = match leftover.as_ref(){
+    //     Some(mol) => mol.index_from_file.unwrap_or(-1),
+    //     None => 0,
+    // };
     // println!("Reading block {} in {}", block, target);
     
     // println!("Reading block {}", );
@@ -322,7 +365,7 @@ fn read_block(rest_of_lines: &mut io::Lines<io::BufReader<GzDecoder<fs::File>>>,
         }
         
         match name_to_ind.get(&new_mol.name){
-            Some(index) => {(&mut best_mols[*index]).update_to_best(&new_mol, "vsscore");}
+            Some(index) => {(&mut best_mols[*index]).update_to_best(&new_mol, "vsscore", equibind_best);}
             None => {
                 name_to_ind.insert(new_mol.name.clone(), best_mols.len());
                 best_mols.push(new_mol.clone());
@@ -335,14 +378,36 @@ fn read_block(rest_of_lines: &mut io::Lines<io::BufReader<GzDecoder<fs::File>>>,
     Ok((best_mols, leftover, need_new_file))
 }
 
-fn parse_target(target: &str, input_dir: path::PathBuf, output_dir: path::PathBuf, pool: Arc<Mutex<ThreadPool>>) -> Result<(), io::Error> {
+fn load_best_equibind(input_dir: &path::Path, load: bool) -> Option<HashMap<String, String>>{
+    if !load{
+        return None;
+    }
+    let mut best_equibind = HashMap::<String, String>::new();
+    let mut best_equibind_file = fs::File::open(input_dir.join("best_from_equibind.txt")).unwrap();
+    let mut contents = String::new();
+    best_equibind_file.read_to_string(&mut contents).unwrap();
+    for line in contents.lines(){
+        let line: Vec<&str> = line.split_whitespace().collect();
+        best_equibind.insert(line[0].to_string(), line[1].to_string());
+    }
+    Some(best_equibind)
+}
+
+
+fn parse_target(target: &str,
+    input_dir: path::PathBuf,
+    output_dir: path::PathBuf,
+    pool: Arc<Mutex<ThreadPool>>,
+    summary_name: &str,
+    ) -> Result<(), io::Error> {
     println!("Starting parse of {}", target);
     let input_dir = input_dir.join(target);
     let output_dir = output_dir.join(target);
     
+    let best_equibind = load_best_equibind(&input_dir, true);
 
-
-    let summary_file = fs::File::open(input_dir.join("newdefault.summary.gz"))?;
+    let summary_file = fs::File::open(input_dir.join(summary_name))?;
+    // let summary_file = fs::File::open(input_dir.join("IDH1_actives.summary.gz"))?;
     let summary_decoder = GzDecoder::new(summary_file);
     let mut summary_bufreader = io::BufReader::with_capacity(8*1000, summary_decoder);
     
@@ -353,22 +418,22 @@ fn parse_target(target: &str, input_dir: path::PathBuf, output_dir: path::PathBu
     let mut all_lines = summary_bufreader.lines();
 
     let leftover = None;
-    let (best_mols, leftover, need_new_file) = read_block(&mut all_lines, leftover, &target)?;
+    let (best_mols, leftover, need_new_file) = read_block(&mut all_lines, leftover, &target, &best_equibind)?;
 
 
     let mut prev_leftover = leftover;
     let mut prev_best_mols = best_mols;
-    let mut output_file = open_output_file(&output_dir, &need_new_file.as_ref().unwrap())?;
+    let mut output_file = open_output_file(&output_dir, &need_new_file.as_ref().unwrap(), summary_name)?;
     let mut prev_need_new_file: Option<String> = None;
     loop{
         let rx = start_decompressor_threads(&prev_best_mols, target, &input_dir, &header, &pool);
-        let (best_mols, leftover, need_new_file) = read_block(&mut all_lines, prev_leftover, &target)?;
+        let (best_mols, leftover, need_new_file) = read_block(&mut all_lines, prev_leftover, &target, &best_equibind)?;
         
 
         gather_work_and_write(rx, &prev_best_mols, &mut output_file, &target)?;
         if prev_need_new_file.is_some(){
             let activity = prev_need_new_file.as_ref().unwrap();
-            output_file = open_output_file(&output_dir, &activity)?;
+            output_file = open_output_file(&output_dir, &activity, summary_name)?;
         }
         prev_leftover = leftover;
         prev_best_mols = best_mols;
@@ -379,7 +444,7 @@ fn parse_target(target: &str, input_dir: path::PathBuf, output_dir: path::PathBu
     }
     if prev_need_new_file.is_some(){
         let activity = prev_need_new_file.as_ref().unwrap();
-        output_file = open_output_file(&output_dir, &activity)?;
+        output_file = open_output_file(&output_dir, &activity, summary_name)?;
     }
     let rx = start_decompressor_threads(&prev_best_mols, target, &input_dir, &header, &pool);
     gather_work_and_write(rx, &prev_best_mols, &mut output_file, &target)?;
@@ -395,14 +460,25 @@ fn parse_all_targets_in_dir(input_dir: path::PathBuf, output_dir: path::PathBuf,
     for target in targets{
         let target = target?;
         if target.file_type()?.is_dir(){
-            let target = target.file_name().to_str().unwrap().to_string();
-            let input_dir = input_dir.clone();
-            let output_dir = output_dir.clone();
+            let curdir = target.path();
+            for summary_file in glob(curdir.join("newdefault*.summary.gz").to_str().unwrap()).expect("Glob failed"){
+                let summary_file = summary_file.unwrap().file_name().unwrap().to_str().unwrap().to_string();
+                let target_name = curdir.file_name().unwrap().to_str().unwrap().to_string();
+                if target_name != "IDH1"{
+                    continue;
+                }
+                let input_dir = input_dir.clone();
+                let output_dir = output_dir.clone();
+                // println!("{}", summary_file.to_str().unwrap())
+                let pool_inner = pool_inner.clone();
+                pool_outer.execute(move || {
+                    parse_target(&target_name, input_dir, output_dir, pool_inner, &summary_file).unwrap();
+                });
 
-            let pool_inner = pool_inner.clone();
-            pool_outer.execute(move || {
-                parse_target(&target, input_dir, output_dir, pool_inner).unwrap();
-            });
+            }
+
+
+
 
             // break;
 
@@ -411,10 +487,21 @@ fn parse_all_targets_in_dir(input_dir: path::PathBuf, output_dir: path::PathBuf,
     pool_outer.join();
     Ok(())
 }
-fn main() -> Result<(), io::Error> {
 
+#[derive(Parser, Debug)]
+struct Args {
+    input_dir: path::PathBuf,
+    output_dir: path::PathBuf,
+    threads_inner: usize,
+    threads_outer: usize,
+}
+
+fn main() -> Result<(), io::Error> {
+    // let args = Args::parse();
+    // println!("{}", args.input_dir.join("idk").to_str().unwrap());
+    
     let input_dir = path::PathBuf::from("/home/qzj517/POR-DD/data/gnina_LIT-PCBA_VS_data/lit-pcba");
-    let output_dir = path::PathBuf::from("/home/qzj517/POR-DD/data/gnina_LIT-PCBA_VS_data/best_scoring_vsscore");
-    parse_all_targets_in_dir(input_dir, output_dir, 20, 15)?;
+    let output_dir = path::PathBuf::from("/home/qzj517/POR-DD/data/gnina_LIT-PCBA_VS_data/test");
+    parse_all_targets_in_dir(input_dir, output_dir, 15, 5)?;
     Ok(())
 }
