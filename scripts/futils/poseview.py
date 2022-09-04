@@ -1,4 +1,3 @@
-from ctypes import DEFAULT_MODE
 import nglview as nv
 import ipywidgets
 from ipywidgets import widgets

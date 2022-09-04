@@ -2,7 +2,10 @@
 data/
 python_scripts/gpu_pty
 **PDBBind*
-
+**/*.sdf
+**/success.txt
+**/failed.txt
+**/*.parquet
 slurm_jobs/
 
 

@@ -1,1 +1,1 @@
-srun -p gpu --gres=gpu:titanrtx:1 --pty --exclude=a00862 bash
+srun -p gpu --gres=gpu:titanrtx:${1:-1} --pty --exclude=a00862 bash

@@ -4,11 +4,11 @@ import numpy as np
 def Linreg(x, y, ax = None, coefpos = (0.8, 0.85), corpos = (0.2, 0.1), coef = False, fontsize = 20):
     if ax is None:
         ax = plt.gca()
-    x = list(x)
-    y = list(y)
-    ax.plot(x, y, ".")
+    # x = list(x)
+    # y = list(y)
+    ax.plot(x, y, ",")
     linreg = scipy.stats.linregress(x, y)
-    spearmanr = scipy.stats.mstats.spearmanr(x, y)[0]
+    # spearmanr = scipy.stats.mstats.spearmanr(x, y)[0]
     xlims = np.array(ax.get_xlim())
     ys = linreg[0]*xlims+linreg[1]
 
