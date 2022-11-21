@@ -7,3 +7,6 @@
 [submodule "gflownet"]
 	path = gflownet
 	url = https://github.com/amfaber/gflownet
+[submodule "GB_GA"]
+	path = GB_GA
+	url = https://github.com/jensengroup/GB_GA
