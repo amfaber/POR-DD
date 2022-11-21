@@ -17,7 +17,7 @@ class DivStr(WrapPath):
         return str(super().__rtruediv__(other))
 ROOT = WrapPath(_script_dir.parent.parent)
 PROT_ABS = "../../data/raw_data/por_structures/3QE2_1_reduced.pdb"
-LIGS_ABS = "../../data/raw_data/cyp_screen/test_3D_opt_1216.sdf"
+LIGS_ABS = "../../data/raw_data/FDA_drugs/test_3D_opt_1216.sdf"
 LIGS_ABS = str((_script_dir / LIGS_ABS).resolve())
 PROT_ABS = str((_script_dir / PROT_ABS).resolve())
 LIGS = relpath(LIGS_ABS, _cwd)

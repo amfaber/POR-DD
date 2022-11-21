@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import re
 from futils import ROOT
+from rdkit import Chem
 
 def load_index(filename = "INDEX_general_PL_data.2020", path = ROOT / "comparison/PDBBind_index"):
     os.chdir(path)
@@ -62,3 +63,7 @@ def load_gnina_across_seeds(dirpath):
     for file in files:
         output[file] = load_bulk2(join(dirpath, file))
     return output
+
+def mols_to_df(mollist):
+    dicts = [mol.GetPropsAsDict(includePrivate = True) for mol in mollist]
+    return pd.DataFrame(dicts)

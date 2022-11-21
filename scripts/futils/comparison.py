@@ -1,12 +1,13 @@
 import scipy.stats
 import matplotlib.pyplot as plt
 import numpy as np
-def Linreg(x, y, ax = None, coefpos = (0.8, 0.85), corpos = (0.2, 0.1), coef = False, fontsize = 20):
+def Linreg(x, y, ax = None, coefpos = (0.8, 0.85), corpos = (0.2, 0.1), coef = False, fontsize = 20, **plotoptions):
     if ax is None:
         ax = plt.gca()
     # x = list(x)
     # y = list(y)
-    ax.plot(x, y, ",")
+    plotstyle = plotoptions.pop("plotstyle", ".")
+    ax.plot(x, y, plotstyle, **plotoptions)
     linreg = scipy.stats.linregress(x, y)
     # spearmanr = scipy.stats.mstats.spearmanr(x, y)[0]
     xlims = np.array(ax.get_xlim())

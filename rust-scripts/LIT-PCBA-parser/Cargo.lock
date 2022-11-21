@@ -3,6 +3,19 @@
 version = 3
 
 [[package]]
+name = "LIT-PCBA-parser"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "flate2",
+ "glob",
+ "lazy_static",
+ "polars",
+ "regex",
+ "threadpool",
+]
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -41,19 +54,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "697ed7edc0f1711de49ce108c541623a0af97c6c60b2f6e2b65229847ac843c2"
 dependencies = [
  "alloc-no-stdlib",
-]
-
-[[package]]
-name = "any_metric_parser"
-version = "0.1.0"
-dependencies = [
- "clap",
- "flate2",
- "glob",
- "lazy_static",
- "polars",
- "regex",
- "threadpool",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 use std::{path, io};
 use clap::{Parser, Subcommand};
 use clap;
-use any_metric_parser;
+use LIT_PCBA_parser;
 
 #[derive(Subcommand, Debug)]
 #[clap(subcommand_negates_reqs = true)]
@@ -60,14 +60,14 @@ fn main() -> Result<(), io::Error> {
     match args.command{
         Some(Commands::Split { input_dir, targets }) => {
             // let input_dir = args.input_dir;
-            any_metric_parser::split::split_middle_at_different_file_idx(&input_dir, &targets[0], "newdefault.summary.gz");
+            LIT_PCBA_parser::split::split_middle_at_different_file_idx(&input_dir, &targets[0], "newdefault.summary.gz");
         },
         Some(Commands::Equibind { input_dir, output_dir, df_path }) => {
             // let input_dir = args.input_dir;
-            any_metric_parser::parse_equibind_data::parse_df(input_dir, output_dir, &df_path)
+            LIT_PCBA_parser::parse_equibind_data::parse_df(input_dir, output_dir, &df_path)
         },
         Some(Commands::Compare { input_equibind, input_gnina } ) => {
-            any_metric_parser::compare::compare(input_equibind, input_gnina)
+            LIT_PCBA_parser::compare::compare(input_equibind, input_gnina)
         },
         None => {
             let input_dir = args.input_dir.unwrap();
@@ -77,7 +77,7 @@ fn main() -> Result<(), io::Error> {
             let compare_type = args.compare_type;
             let same_as_equibind = args.same_as_equibind;
             let targets = args.targets;
-            any_metric_parser::parse_gnina_data::parse_all_targets_in_dir(input_dir, output_dir, inner_threads, outer_threads, &targets, &compare_type, same_as_equibind)?;
+            LIT_PCBA_parser::parse_gnina_data::parse_all_targets_in_dir(input_dir, output_dir, inner_threads, outer_threads, &targets, &compare_type, same_as_equibind)?;
         }
     };
 
