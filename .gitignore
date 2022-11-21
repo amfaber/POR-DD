@@ -10,6 +10,7 @@ slurm_jobs/
 **/Figures
 **/*.smi
 .vscode/
+*.tif
 
 
 # Byte-compiled / optimized / DLL files
