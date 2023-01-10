@@ -11,6 +11,7 @@ slurm_jobs/
 **/*.smi
 .vscode/
 *.tif
+Internal_assays
 
 
 # Byte-compiled / optimized / DLL files

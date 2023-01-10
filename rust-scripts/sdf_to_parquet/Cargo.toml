@@ -6,8 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "sdf_to_parquet"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.16.5", features = ["extension-module"] }
 polars = { version = "0.23.2", features = ["parquet"] }
+
+[[bin]]
+name = "thebin"
+path = "src/main.rs"
