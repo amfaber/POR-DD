@@ -26,20 +26,20 @@ pub fn extract_mols<'a>(input: &'a str, activity: Option<&'a str>) -> impl Itera
                 propname = this_it.next().unwrap();
                 match rest.next(){
                     Some((j, propvalue)) => {
-                        match propname.get(3..){
-                            Some(name) => {
+                        // match propname.trim(){
+                        //     Some(name) => {
                                 // dbg!(name);
                                 // dbg!(propvalue);
-                                properties.push((name.to_string(), propvalue.to_string()))
-                            },
-                            None => {
-                                dbg!(propname);
-                                dbg!(propvalue);
-                                dbg!(i);
-                                dbg!(j);
-                                panic!("we shouldn't get here")
-                            }
-                        }
+                                properties.push((propname.trim()[1..].to_string(), propvalue.to_string()))
+                            // },
+                            // None => {
+                            //     dbg!(propname);
+                            //     dbg!(propvalue);
+                            //     dbg!(i);
+                            //     dbg!(j);
+                            //     panic!("we shouldn't get here")
+                            // }
+                        // }
                     },
                     None => {
                         println!("Error encountered in sdf, saving properties only for the molecules before the error");

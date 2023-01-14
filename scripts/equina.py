@@ -13,11 +13,12 @@ FLOAT_COLS = ["minimizedAffinity", "minimizedRMSD", "CNNscore", "CNNaffinity", "
 #     elif input.split(".")[1] == "sdf":
 #         return Chem.SDMolSupplier(input)
 
-def do_gnina(r, l, outdir, split = None, make_parquet = False):
+def do_gnina(r, l, outdir, split = None, make_parquet = False, just_parquet = False):
     if split is None:
-        gnina_cmd = f"gnina -r {r} -l {l} -o {os.path.join(outdir, 'gnina.sdf')} --minimize"
-        os.system(gnina_cmd)
-        if make_parquet:
+        if not just_parquet:
+            gnina_cmd = f"gnina -r {r} -l {l} -o {os.path.join(outdir, 'gnina.sdf')} --minimize"
+            os.system(gnina_cmd)
+        if make_parquet or just_parquet:
             sdf_to_parquet.extract_single_file(str(outdir / 'gnina.sdf'), str(outdir / "props.parquet"),
                 float_cols = FLOAT_COLS)
 
@@ -35,12 +36,13 @@ def do_gnina(r, l, outdir, split = None, make_parquet = False):
             cur_in = Path(outdir) / "gnina_inps" / f"{end_idx}.sdf"
             cur_out = Path(outdir) / "gnina_outs" / f"{end_idx}.sdf"
             parquet_path = Path(outdir) / "props" / f"{end_idx}.parquet"
-            with open(cur_in, "w") as file:
-                for j in range(min(split, len(supp) - i*split)):
-                    file.write(supp.GetItemText(i*split + j))
-            gnina_cmd = f"gnina -r {r} -l {cur_in} -o {cur_out} --minimize"
-            os.system(gnina_cmd)
-            if make_parquet:
+            if not just_parquet:
+                with open(cur_in, "w") as file:
+                    for j in range(min(split, len(supp) - i*split)):
+                        file.write(supp.GetItemText(i*split + j))
+                gnina_cmd = f"gnina -r {r} -l {cur_in} -o {cur_out} --minimize"
+                os.system(gnina_cmd)
+            if make_parquet or just_parquet:
                 sdf_to_parquet.extract_single_file(str(cur_out), str(parquet_path),
                     float_cols = FLOAT_COLS)
 
@@ -52,8 +54,11 @@ def equina(multiligand_inference_args, repeats = None, keeps = None, make_parque
         out_dir = Path(passed_outdir)
         if not just_gnina:
             work_was_done = multiligand_inference.main(args = args, keeps = keeps)
-        if just_gnina or work_was_done:
-            do_gnina(args.rec_pdb, str(out_dir / 'output.sdf'), out_dir, split = split_gnina, make_parquet = make_parquet)
+        else:
+            work_was_done = False
+        if just_gnina or make_parquet or work_was_done:
+            just_parquet = make_parquet and not work_was_done
+            do_gnina(args.rec_pdb, str(out_dir / 'output.sdf'), out_dir, split = split_gnina, make_parquet = make_parquet, just_parquet = just_parquet)
             # gnina_cmd = f"gnina -r {args.rec_pdb} -l {out_dir / 'output.sdf'} -o {out_dir / 'gnina.sdf'} --minimize"
             # os.system(gnina_cmd)
         # if make_parquet:
@@ -65,9 +70,11 @@ def equina(multiligand_inference_args, repeats = None, keeps = None, make_parque
             args.seed = i
             if not just_gnina:
                 work_was_done = multiligand_inference.main(args = args, keeps = keeps)
-            if just_gnina or work_was_done:
-            # out_dir = Path(out_dir)
-                do_gnina(args.rec_pdb, str(out_dir / 'output.sdf'), out_dir, split = split_gnina, make_parquet = make_parquet)
+            else:
+                work_was_done = False
+            if just_gnina or make_parquet or work_was_done:
+                just_parquet = make_parquet and not work_was_done
+                do_gnina(args.rec_pdb, str(out_dir / 'output.sdf'), out_dir, split = split_gnina, make_parquet = make_parquet, just_parquet = just_parquet)
             #     gnina_cmd = f"gnina -r {args.rec_pdb} -l {out_dir / 'output.sdf'} -o {out_dir / 'gnina.sdf'} --minimize --seed {i}"
             #     os.system(gnina_cmd)
             # if make_parquet:
@@ -86,4 +93,4 @@ if __name__ == "__main__":
     args, cmdlineargs = multiligand_inference.parse_arguments(rest)
     args = multiligand_inference.get_default_args(args, cmdlineargs)
 
-    equina(args, repeats = known_args.repeats, make_parquet = known_args.make_parquet, split_gnina = known_args.split_gnina)
+    equina(args, repeats = known_args.repeats, make_parquet = known_args.make_parquet, split_gnina = known_args.split_gnina, just_gnina = known_args.just_gnina)
